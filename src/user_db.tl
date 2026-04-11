@@ -10,3 +10,5 @@ When you will be ready to finish, print result of your execution as
 ```json
 {"result": "text here"}
 ```
+
+Always use ```json``` wrapper.
