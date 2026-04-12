@@ -7,34 +7,37 @@ load_dotenv()
 
 
 class Model:
-    def __init__(self):
+    def __init__(self, model: str):
+        self.model = model
         self.client = AsyncOpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
     async def call(self, ctx: str):
-        return await self.client.responses.create(model="gpt-5.4-mini", input=ctx)
+        return await self.client.responses.create(model=self.model, input=ctx)
 
 
 class Agent:
     def __init__(self, model):
         self.model = model
-        self.score = 0
         self.file_paths = ["instr.tl", "user_db.tl"]
+        self.files = []
+        self.max_score = 2
 
     async def read_file(self, filename: str):
         async with aiofiles.open(filename, mode="r") as f:
             contents = await f.read()
         return contents
 
-    async def start(self, prompt: str):
-        self.score = 0
-
+    async def init_ctx(self):
         tasks = [self.read_file(path) for path in self.file_paths]
-        files = await asyncio.gather(*tasks)
-        ctx = "\n\n".join(files).replace("{{prompt}}", prompt)
+        self.files = await asyncio.gather(*tasks)
+
+    async def start(self, prompt: str) -> tuple[str, int]:
+        score = 0
+        ctx = "\n\n".join(self.files).replace("{{prompt}}", prompt)
 
         response = await self.model.call(ctx)
         output, s = parse(response.output_text)
-        self.score += s
+        score += s
 
         ctx = f"{ctx}\n\n{response.output_text}\n\n{output}"
 
@@ -45,12 +48,14 @@ class Agent:
         print("=== result ===")  # use it to calc score
 
         output, s = parse(response.output_text)
-        self.score += s
+        score += s
 
         print(output)
-        print(f"=== score: {self.score} ===")
+        print(f"=== score: {score} ===")
+        return output, score
 
 
 if __name__ == "__main__":
-    agent = Agent(Model())
+    agent = Agent(Model("gpt-5.4-mini"))
+    asyncio.run(agent.init_ctx())
     asyncio.run(agent.start("print usernames of all customers"))
