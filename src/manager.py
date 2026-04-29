@@ -1,4 +1,4 @@
-import os, asyncio, aiofiles
+import os, asyncio, tomllib
 from openai import AsyncOpenAI
 from dotenv import load_dotenv
 from user_db import parse
@@ -11,29 +11,30 @@ class Model:
         self.model = model
         self.client = AsyncOpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
-    async def call(self, ctx: str):
-        return await self.client.responses.create(model=self.model, input=ctx)
+    async def call(self, ctx: str, temperature: float = 1.0):
+        return await self.client.responses.create(
+            model=self.model, input=ctx, temperature=temperature
+        )
 
 
 class Agent:
     def __init__(self, model):
         self.model = model
-        self.file_paths = ["instr.tl", "user_db.tl"]
-        self.files = []
+        self.toml_path = "agent.toml"
+        self.ctx = ""
         self.max_score = 2
 
-    async def read_file(self, filename: str):
-        async with aiofiles.open(filename, mode="r") as f:
-            contents = await f.read()
-        return contents
+    def init_ctx(self):
+        with open(self.toml_path, "rb") as f:
+            data = tomllib.load(f)
+        self.ctx = "\n\n".join([data["instructions"]["system"], data["tool"]["spec"]])
 
-    async def init_ctx(self):
-        tasks = [self.read_file(path) for path in self.file_paths]
-        self.files = await asyncio.gather(*tasks)
+    def update_ctx(self, ctx: str):
+        self.ctx = ctx
 
-    async def start(self, prompt: str) -> tuple[str, int]:
+    async def start(self, prompt: str, log: bool = False) -> tuple[str, int]:
         score = 0
-        ctx = "\n\n".join(self.files).replace("{{prompt}}", prompt)
+        ctx = self.ctx.replace("{{prompt}}", prompt)
 
         response = await self.model.call(ctx)
         output, s = parse(response.output_text)
@@ -43,19 +44,21 @@ class Agent:
 
         response = await self.model.call(ctx)
 
-        print("=== ctx ===")  # send it with templates to large llm to rewrite templates
-        print(f"{ctx}\n\n{response.output_text}")
-        print("=== result ===")  # use it to calc score
+        if log:
+            print("=== ctx ===")
+            print(f"{ctx}\n\n{response.output_text}")
+            print("=== result ===")
 
         output, s = parse(response.output_text)
         score += s
 
-        print(output)
-        print(f"=== score: {score} ===")
+        if log:
+            print(output)
+            print(f"=== score: {score} ===")
         return output, score
 
 
 if __name__ == "__main__":
     agent = Agent(Model("gpt-5.4-mini"))
-    asyncio.run(agent.init_ctx())
-    asyncio.run(agent.start("print usernames of all customers"))
+    agent.init_ctx()
+    asyncio.run(agent.start("print usernames of all customers", True))

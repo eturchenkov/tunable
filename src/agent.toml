@@ -1,3 +1,15 @@
+[instructions]
+system = """
+You are agent.
+You should answer user's question.
+Make execution step by step.
+
+### Question:
+{{prompt}}
+"""
+
+[tool]
+spec = """
 ### Tool:
 Use following request to get list of customers
 ```json
@@ -12,3 +24,4 @@ When you will be ready to finish, print result of your execution as
 ```
 
 Always use ```json``` wrapper.
+"""
