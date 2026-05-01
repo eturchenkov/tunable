@@ -15,17 +15,51 @@ dataset = [
 
 
 class Eval:
-    def __init__(self, agent: Agent, dataset: list[tuple[str, str]]) -> None:
-        self.agent = agent
+    def __init__(self, optimizer: Model, dataset: list[tuple[str, str]]) -> None:
+        self.optimizer = optimizer
         self.dataset = dataset
 
-    async def eval_session(self):
-        pass
+    async def eval_agent(self, agent: Agent, iterations: int = 5) -> float:
+        output, max_score = await self.run(agent)
+        print(f"===== avg_score: {max_score} ===== ")
+        for _ in range(iterations):
+            res = await self.optimizer.call(
+                f"""{output}
 
-    async def run(self) -> tuple[str, float]:
-        sessions = [self.agent.start(pair) for pair in self.dataset]
+Agent.toml file:
+```toml
+{agent.toml_file}
+```
+
+Rewrite this toml file to increase the agent performance.
+Always preserve {{prompt}} (double parentheses) to insert user's prompt.
+Describe tool usage only in [tool] spec field.
+Try to keep it short.""",
+                temperature=1,
+            )
+            toml_match = re.search(r"```toml\s*(.*)\s*```", res.output_text, re.DOTALL)
+            if not toml_match:
+                continue
+            toml = toml_match.group(1)
+            prev_ctx = agent.ctx
+            agent.load_ctx(toml)
+            output, avg_score = await self.run(agent)
+            print(f"===== avg_score: {avg_score} ===== ")
+            if avg_score >= max_score:
+                max_score = avg_score
+            else:
+                agent.update_ctx(prev_ctx)
+                print("returned to previous")
+            if avg_score == 1:
+                with open(f"agent.{int(time.time())}.toml", "w") as f:
+                    f.write(toml)
+                break
+        return max_score
+
+    async def run(self, agent: Agent) -> tuple[str, float]:
+        sessions = [agent.start(pair) for pair in self.dataset]
         results = await asyncio.gather(*sessions)
-        scores = [res[2] / self.agent.max_score for res in results]
+        scores = [res[2] / agent.max_score for res in results]
         avg_score = reduce(lambda x, y: x + y, scores) / len(self.dataset)
 
         output = "\n\n".join(
@@ -39,43 +73,8 @@ async def main():
     agent = Agent(Model("gpt-5.4-mini"))
     optimizer = Model("gpt-5.4")
     agent.init_ctx()
-    evaluation = Eval(agent, dataset)
-
-    output, max_score = await evaluation.run()
-    print(f"===== avg_score: {max_score} ===== ")
-    for _ in range(5):
-        res = await optimizer.call(
-            f"""{output}
-
-Agent.toml file:
-```toml
-{agent.toml_file}
-```
-
-Rewrite this toml file to increase the agent performance.
-Always preserve {{prompt}} (double parentheses) to insert user's prompt.
-Describe tool usage only in [tool] spec field.
-Try to keep it short.""",
-            temperature=1,
-        )
-        toml_match = re.search(r"```toml\s*(.*)\s*```", res.output_text, re.DOTALL)
-        if toml_match:
-            toml = toml_match.group(1)
-            prev_ctx = agent.ctx
-            agent.load_ctx(toml)
-            output, avg_score = await evaluation.run()
-            print(f"===== avg_score: {avg_score} ===== ")
-            if avg_score >= max_score:
-                max_score = avg_score
-                # print(output)
-            else:
-                # print(agent.ctx)
-                agent.update_ctx(prev_ctx)
-                print("returned to previous")
-            if avg_score == 1:
-                with open(f"agent.{int(time.time())}.toml", "w") as f:
-                    f.write(toml)
-                break
+    evaluation = Eval(optimizer, dataset)
+    await evaluation.eval_agent(agent)
     print(agent.ctx)
 
 
