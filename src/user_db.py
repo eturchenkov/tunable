@@ -8,10 +8,14 @@ def parse(text: str) -> tuple[str, int]:
         json_str = json_match.group(1)
         extracted = json.loads(json_str)
         if "customers" in extracted:
-            return (
-                f"```json\n{str(shrink_list(users, extracted['customers']))}\n```\n",
-                1,
-            )
+            try:
+                user_list = shrink_list(users, extracted["customers"])
+                return (
+                    f"```json\n{str(user_list)}\n```\n",
+                    1,
+                )
+            except:
+                return "No such property in an object", 0
         elif "result" in extracted:
             return extracted["result"], 1
         return "", 0

@@ -1,4 +1,4 @@
-import asyncio, re
+import asyncio, re, time
 from manager import Agent, Model
 from functools import reduce
 
@@ -23,35 +23,60 @@ class Eval:
         pass
 
     async def run(self) -> tuple[str, float]:
-        sessions = [self.agent.start(pair[0]) for pair in self.dataset]
+        sessions = [self.agent.start(pair) for pair in self.dataset]
         results = await asyncio.gather(*sessions)
-        scores = [res[1] / self.agent.max_score for res in results]
+        scores = [res[2] / self.agent.max_score for res in results]
         avg_score = reduce(lambda x, y: x + y, scores) / len(self.dataset)
 
         output = "\n\n".join(
             f"# Agent execution #{i}:\n\n{res[0]}" for i, res in enumerate(results)
         )
-        print(f"=== avg_score: {avg_score} ===")
+        # print(f"=== avg_score: {avg_score} ===")
         return output, avg_score
 
 
 async def main():
     agent = Agent(Model("gpt-5.4-mini"))
+    optimizer = Model("gpt-5.4")
     agent.init_ctx()
     evaluation = Eval(agent, dataset)
 
-    output, avg_score = await evaluation.run()
-    print(avg_score)
-    print(output)
-    optimizer = Model("gpt-5.4")
-    res = await optimizer.call(
-        f"{output}\n\n{agent.ctx}\n\nRewrite toml", temperature=1.5
-    )
-    toml_match = re.search(r"```toml\s*(.*?)\s*```", res.output_text, re.DOTALL)
-    if toml_match:
-        ctx = toml_match.group(1)
-        agent.update_ctx(ctx)
-        print(ctx)
+    output, max_score = await evaluation.run()
+    print(f"===== avg_score: {max_score} ===== ")
+    for _ in range(5):
+        res = await optimizer.call(
+            f"""{output}
+
+Agent.toml file:
+```toml
+{agent.toml_file}
+```
+
+Rewrite this toml file to increase the agent performance.
+Always preserve {{prompt}} (double parentheses) to insert user's prompt.
+Describe tool usage only in [tool] spec field.
+Try to keep it short.""",
+            temperature=1,
+        )
+        toml_match = re.search(r"```toml\s*(.*)\s*```", res.output_text, re.DOTALL)
+        if toml_match:
+            toml = toml_match.group(1)
+            prev_ctx = agent.ctx
+            agent.load_ctx(toml)
+            output, avg_score = await evaluation.run()
+            print(f"===== avg_score: {avg_score} ===== ")
+            if avg_score >= max_score:
+                max_score = avg_score
+                # print(output)
+            else:
+                # print(agent.ctx)
+                agent.update_ctx(prev_ctx)
+                print("returned to previous")
+            if avg_score == 1:
+                with open(f"agent.{int(time.time())}.toml", "w") as f:
+                    f.write(toml)
+                break
+    print(agent.ctx)
 
 
 if __name__ == "__main__":
