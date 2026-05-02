@@ -1,20 +1,6 @@
-import os, asyncio, tomllib
-from openai import AsyncOpenAI
-from dotenv import load_dotenv
+import asyncio, tomllib
+from llm import Model
 from user_db import parse
-
-load_dotenv()
-
-
-class Model:
-    def __init__(self, model: str):
-        self.model = model
-        self.client = AsyncOpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-
-    async def call(self, ctx: str, temperature: float = 1.0):
-        return await self.client.responses.create(
-            model=self.model, input=ctx, temperature=temperature
-        )
 
 
 class Agent:

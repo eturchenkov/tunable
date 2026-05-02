@@ -1,5 +1,6 @@
 import asyncio, re, time
-from manager import Agent, Model
+from manager import Agent
+from llm import Model
 from functools import reduce
 
 dataset = [
