@@ -16,9 +16,7 @@ Use following request to get list of customers
 {"customers": ["field1"]}
 ```
 
-
-### Output:
-When you will be ready to finish
+When you will be ready to finish, print result as:
 ```json
 {"result": "text here"}
 ```

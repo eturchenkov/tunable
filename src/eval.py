@@ -1,7 +1,7 @@
 import asyncio, re, time
 from manager import Agent
 from llm import Model
-from functools import reduce
+from emb import Embedding
 
 dataset = [
     (
@@ -60,14 +60,22 @@ Try to keep it short.""",
     async def run(self, agent: Agent) -> tuple[str, float]:
         sessions = [agent.start(pair) for pair in self.dataset]
         results = await asyncio.gather(*sessions)
-        scores = [res[2] / agent.max_score for res in results]
-        avg_score = reduce(lambda x, y: x + y, scores) / len(self.dataset)
 
-        output = "\n\n".join(
-            f"# Agent execution #{i}:\n\n{res[0]}" for i, res in enumerate(results)
+        scores = 0
+        for i, pair in enumerate(self.dataset):
+            _, target = pair
+            output = results[i][1]
+            target_emb = Embedding(target)
+            output_emb = Embedding(output)
+            await asyncio.gather(target_emb.calc(), output_emb.calc())
+            scores += target_emb.cos_dist(target_emb.vec, output_emb.vec)
+            print(f"\n{target} => {output}\n\n")
+        avg_score = scores / len(self.dataset)
+
+        contexts = "\n\n".join(
+            f"# Agent execution #{i}:\n\n{res[0]}\n\n" for i, res in enumerate(results)
         )
-        # print(f"=== avg_score: {avg_score} ===")
-        return output, avg_score
+        return contexts, avg_score
 
 
 async def main():

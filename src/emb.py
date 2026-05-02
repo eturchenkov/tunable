@@ -15,10 +15,10 @@ class Embedding:
         self.vec = np.array(response.data[0].embedding)
 
     def distances(self, *rest: "Embedding") -> list[float]:
-        return [self._cos_dist(self.vec, emb.vec) for emb in rest]
+        return [self.cos_dist(self.vec, emb.vec) for emb in rest]
 
-    def _cos_dist(self, vec1: np.ndarray, vec2: np.ndarray) -> float:
-        """it returns [0, 1] range"""
+    def cos_dist(self, vec1: np.ndarray, vec2: np.ndarray) -> float:
+        """It returns cosine distance in [0, 1] range"""
         cos_d = float(
             np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
         )
